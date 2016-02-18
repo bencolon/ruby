@@ -779,15 +779,22 @@ random_load(VALUE obj, VALUE dump)
  * or the RSA cryptographic provider on Windows), which is then combined with
  * the time, the process id, and a sequence number.
  *
+ * If a block is given, changes the seed with +number+ only for the block.
+ * The current system seed is returned.
+ *
  * srand may be used to ensure repeatable sequences of pseudo-random numbers
  * between different runs of the program. By setting the seed to a known value,
  * programs can be made deterministic during testing.
  *
- *   srand 1234               # => 268519324636777531569100071560086917274
- *   [ rand, rand ]           # => [0.1915194503788923, 0.6221087710398319]
- *   [ rand(10), rand(1000) ] # => [4, 664]
- *   srand 1234               # => 1234
- *   [ rand, rand ]           # => [0.1915194503788923, 0.6221087710398319]
+ *   srand 1234                     # => 268519324636777531569100071560086917274
+ *   [ rand, rand ]                 # => [0.1915194503788923, 0.6221087710398319]
+ *   [ rand(10), rand(1000) ]       # => [4, 664]
+ *   srand 1234                     # => 1234
+ *   [ rand, rand ]                 # => [0.1915194503788923, 0.6221087710398319]
+ *   srand(5678) { puts rand }      # 0.4893269800108977
+ *                                  # => 1234
+ *   srand 5678                     # => 1234
+ *   rand                           # => 0.4893269800108977
  */
 
 static VALUE
@@ -797,13 +804,24 @@ rb_f_srand(int argc, VALUE *argv, VALUE obj)
     rb_random_t *r = &default_rand;
 
     if (argc == 0) {
-	seed = random_seed();
+        if (rb_block_given_p()) {
+            rb_warn("given block not used");
+        }
+        old = r->seed;
+        r->seed = rand_init(&r->mt, random_seed());
     }
     else {
-	rb_scan_args(argc, argv, "01", &seed);
+        rb_scan_args(argc, argv, "01", &seed);
+        old = r->seed;
+        if (rb_block_given_p()) {
+          r->seed = rand_init(&r->mt, seed);
+          rb_yield(Qundef);
+          r->seed = old;
+        }
+        else {
+          r->seed = rand_init(&r->mt, seed);
+        }
     }
-    old = r->seed;
-    r->seed = rand_init(&r->mt, seed);
 
     return old;
 }
